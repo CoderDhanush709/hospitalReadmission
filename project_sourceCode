@@ -1,0 +1,70 @@
+from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler, StringIndexer
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+# Create Spark session
+spark = SparkSession.builder \
+    .appName("Hospital Readmission Prediction") \
+    .getOrCreate()
+
+# Load data (YOUR FILE PATH)
+df = spark.read.csv(
+    r"C:\Users\Dhanush siva raman\Documents\New folder\hospital.csv.txt",
+    header=True,
+    inferSchema=True
+)
+
+print("===== DATA =====")
+df.show()
+
+# Convert categorical column (gender → numeric)
+indexer = StringIndexer(inputCol="gender", outputCol="gender_index")
+df = indexer.fit(df).transform(df)
+
+# Feature columns
+features = ["age", "gender_index", "diabetes", "hypertension",
+            "prev_admissions", "length_of_stay"]
+
+# Convert to vector
+assembler = VectorAssembler(inputCols=features, outputCol="features")
+df = assembler.transform(df)
+
+# Split data
+train, test = df.randomSplit([0.7, 0.3], seed=42)
+
+# Model
+lr = LogisticRegression(featuresCol="features", labelCol="readmitted")
+model = lr.fit(train)
+
+# Predictions
+predictions = model.transform(test)
+
+print("===== PREDICTIONS =====")
+predictions.select("features", "readmitted", "prediction").show()
+
+# Evaluation
+evaluator = BinaryClassificationEvaluator(labelCol="readmitted")
+accuracy = evaluator.evaluate(predictions)
+
+print("Model Accuracy:", accuracy)
+
+import matplotlib.pyplot as plt
+
+# Convert Spark DataFrame → Pandas
+pdf = df.toPandas()
+
+# Count readmitted values
+counts = pdf['readmitted'].value_counts()
+
+# Bar chart
+counts.plot(kind='bar')
+plt.title("Readmission Count")
+plt.xlabel("Readmitted (0 = No, 1 = Yes)")
+plt.ylabel("Count")
+plt.show()
+
+# Pie chart
+counts.plot(kind='pie', autopct='%1.1f%%')
+plt.title("Readmission Distribution")
+plt.show()
